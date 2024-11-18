@@ -116,28 +116,6 @@ public class Program {
 						break;
 
 					case 64: // 0100 0000 - File
-						if(recievedHeader.FragTotal != 0) {
-							expectedFrags = recievedHeader.FragTotal;
-							toBeFile = new byte[expectedFrags];
-							fileName = Encoding.ASCII.GetString(recievedHeader.Data);
-						}
-						else {
-							int offset = (recievedHeader.FragId - 1) * recievedHeader.Data.Length;
-
-							Array.Copy(recievedHeader.Data, 0, toBeFile, offset, recievedHeader.Data.Length);
-
-							recievedFragCounter++;
-
-							if(recievedFragCounter >= expectedFrags) {
-
-								var resultPath = Path.Combine(DESTINATION_FILE_PATH, fileName);
-								File.WriteAllBytes(resultPath, toBeFile);
-
-								toBeFile = null;
-								recievedFragCounter = 0;
-								fileName = null;
-							}
-						}
 
                         break;
 					default:
@@ -172,8 +150,10 @@ public class Program {
 			string message = parts.Length > 1
 				? string.Join(" ", parts, 1, parts.Length - 1)
 				: "";
+			byte[] msgBytes = Encoding.ASCII.GetBytes(message);
 
-			switch(command) {
+
+            switch(command) {
 				case "/help":
 					PrintHelpMenu();
 					break;
@@ -183,20 +163,20 @@ public class Program {
                     return;
 
 				case "/msg":
-					headerToSend = new MyHeader();
+                    headerToSend = new MyHeader();
 					headerToSend.Flags = (byte)FlagsEnum.TEXT_MSG_TYPE;
-					headerToSend.Data = Encoding.ASCII.GetBytes(message);
+					headerToSend.Data.AddRange(msgBytes);
 					
 					SendMessage(headerToSend);
 					break;
 
 				case "/dmsg":
-					headerToSend = new MyHeader();
+                    headerToSend = new MyHeader();
 					headerToSend.Flags = (byte)FlagsEnum.TEXT_MSG_TYPE;
-					headerToSend.Data = Encoding.ASCII.GetBytes(message);
+                    headerToSend.Data.AddRange(msgBytes);
 
-					
-					SendDamagedMessage(headerToSend);
+
+                    SendDamagedMessage(headerToSend);
 					break;
 
 				case "/file":
@@ -233,12 +213,11 @@ public class Program {
 	static void SendMessage(MyHeader message) {
 		
 		if(message.Data != null) {
-			message.Crc16 = _utils.GetCrc16(message.Data);
+			message.Crc16 = _utils.GetCrc16(message.Data.ToArray());
 		}
 
 		lastSent = new MyHeader() {
 			Flags = message.Flags,
-			FragId = message.FragId,
 			FragTotal = message.FragTotal,
 			SeqNum = message.SeqNum,
 			Crc16 = message.Crc16,
@@ -251,21 +230,22 @@ public class Program {
     static void SendDamagedMessage(MyHeader message) {
 
         if(message.Data != null) {
-            message.Crc16 = _utils.GetCrc16(message.Data);
+            message.Crc16 = _utils.GetCrc16(message.Data.ToArray());
         }
 
         lastSent = new MyHeader() {
             Flags = message.Flags,
-            FragId = message.FragId,
             FragTotal = message.FragTotal,
             SeqNum = message.SeqNum,
             Crc16 = message.Crc16,
             Data = message.Data
         };
 
-        
-		var damagedData = (byte[])message.Data.Clone();
-		damagedData[0] ^= 0x01;     // flip the last bit to missmatch the crc
+
+        List<byte> damagedData = new List<byte>(message.Data);
+        if(damagedData.Count > 0) {
+            damagedData[0] ^= 0x01;     // flip the last bit to mismatch the CRC
+        }
         message.Data = damagedData;
 
         var sendBytes = _utils.GetByteArr(message);
@@ -281,16 +261,14 @@ public class Program {
 
 		headerToSend = new MyHeader() {
 			Flags = (byte)FlagsEnum.FILE_MSG_TYPE,
-			FragId = 0,
 			FragTotal = (byte)len,
-			SeqNum = 0,
+			SeqNum = new byte[3],
 			Crc16 = _utils.GetCrc16(nameBytes),
-			Data = nameBytes
-		};
+			Data = new List<byte>(nameBytes)
+        };
 
         lastSent = new MyHeader() {
             Flags = headerToSend.Flags,
-            FragId = headerToSend.FragId,
             FragTotal = headerToSend.FragTotal,
             SeqNum = headerToSend.SeqNum,
             Crc16 = headerToSend.Crc16,
@@ -306,12 +284,7 @@ public class Program {
                 byte[] singleByte = [fileBytes[i]];
 
 				headerToSend = new MyHeader() {
-                    Flags = (byte)FlagsEnum.FILE_MSG_TYPE,
-                    FragId = (byte)(i + 1),
-                    FragTotal = 0,
-                    SeqNum = 0,
-                    Crc16 = _utils.GetCrc16(singleByte),
-                    Data = singleByte
+                    SeqNum = BitConverter.GetBytes(i + 1)
                 };
 
                 var sendFragBytes = _utils.GetByteArr(headerToSend);
@@ -324,7 +297,7 @@ public class Program {
 	}
 
 	static void HandleRecievedMessage(MyHeader packet) {
-		ushort expectedCrc16 = _utils.GetCrc16(packet.Data);
+		ushort expectedCrc16 = _utils.GetCrc16(packet.Data.ToArray());
 		
 		if(expectedCrc16 != packet.Crc16) {
 			MyHeader reply = new();
@@ -335,7 +308,7 @@ public class Program {
 			Console.WriteLine("[-] Recieved damaged packet, sending again...");
 		}
 		else {
-			string msg = Encoding.ASCII.GetString(packet.Data);
+			string msg = Encoding.ASCII.GetString(packet.Data.ToArray());
 			Console.WriteLine($">> {msg}");
 		}
 	}
@@ -357,11 +330,11 @@ public class Program {
 	static void PrintStatusMenu() {
         Console.WriteLine("\n==============================================================\n");
         Console.WriteLine($"[i] Fragment size: {FRAGMENT_SIZE}");
-		Console.WriteLine($"[i] Last Sent packet");
-		Console.WriteLine($"\t[Data] {Encoding.ASCII.GetString(lastSent.Data)}");
-		Console.WriteLine($"\t[CRC] 0x{lastSent.Crc16:X4}");
-		Console.WriteLine($"\t[Flags] 0x{lastSent.Flags:X2}");
-		Console.WriteLine("\n==============================================================\n");
+        Console.WriteLine($"[i] Last Sent packet:");
+        Console.WriteLine($"\t[Data] {Encoding.ASCII.GetString(lastSent.Data.ToArray())}");
+        Console.WriteLine($"\t[CRC] 0x{lastSent.Crc16:X4}");
+        Console.WriteLine($"\t[Flags] 0x{lastSent.Flags:X2}");
+        Console.WriteLine("\n==============================================================\n");
     }
 	public static void SendWhatever(byte[] bytes) {
         try {

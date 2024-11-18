@@ -1,0 +1,27 @@
+﻿Program musí byť implementovaný v jednom z nasledujúcich programovacích jazykov: C, C++, C#, Python a Rust(len, ak cvičiaci odsúhlasí).
+ - YES - 
+
+Používateľ musí vedieť nastaviť na uzle port na počúvanie.
+ - YES - 
+
+Používateľ musí vedieť nastaviť cieľovú IP adresu a port.
+ - YES - 
+
+Používateľ musí mať možnosť zvoliť si max. veľkosť fragmentu na uzle a meniť ju dynamicky počas behu programu pred poslaním textu/súboru (neplatí pre režijné správy).
+
+
+Uzol musí vedieť zobraziť nasledujúce informácie o prijatom/odoslanom texte/súbore:
+	názov a absolútnu cestu k súboru na danom uzle,
+	veľkosť a počet fragmentov vrátane celkovej veľkosti (posledný fragment môže mať odlišnú veľkosť ako predchádzajúce fragmenty).
+
+
+Simulovať chybu prenosu odoslaním minimálne 1 chybného fragmentu pri prenose textu a súboru (do dátovej časti fragmentu alebo do checksum je cielene vnesená chyba, to znamená, že prijímajúca strana deteguje chybu pri prenose).
+
+
+Prijímajúca strana musí byť schopná oznámiť odosielateľovi správne aj nesprávne doručenie fragmentov. Pri nesprávnom doručení fragmentu vyžiada znovu poslať poškodené dáta.
+
+
+Možnosť odoslať 2MB súbor do 60 sekúnd a uložiť ho na prijímacom uzle ako rovnaký súbor.
+
+
+Možnosť nastaviť na uzle miesto, kam sa súbor uloží po prijatí.
