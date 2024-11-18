@@ -202,6 +202,10 @@ public class Program {
 						Console.WriteLine($"[!] {e}");
 					}
 					break;
+
+				case "/clear":
+					Console.Clear();
+					break;
 				
 				default:
 					Console.WriteLine("[!] Invalid command, use /help if you don't know what to do ;)");
@@ -261,7 +265,7 @@ public class Program {
 
 		headerToSend = new MyHeader() {
 			Flags = (byte)FlagsEnum.FILE_MSG_TYPE,
-			FragTotal = (byte)len,
+			FragTotal = BitConverter.GetBytes(len),
 			SeqNum = new byte[3],
 			Crc16 = _utils.GetCrc16(nameBytes),
 			Data = new List<byte>(nameBytes)
@@ -284,8 +288,8 @@ public class Program {
                 byte[] singleByte = [fileBytes[i]];
 
 				headerToSend = new MyHeader() {
-                    SeqNum = BitConverter.GetBytes(i + 1)
-                };
+					SeqNum = BitConverter.GetBytes(i + 1)
+				};
 
                 var sendFragBytes = _utils.GetByteArr(headerToSend);
                 SendWhatever(sendFragBytes);
@@ -325,10 +329,12 @@ public class Program {
 		Console.WriteLine("/dfile [path]    -> send damaged file");
 		Console.WriteLine("/status			  -> display some info");
 		Console.WriteLine("/fragsize [int]	  -> set fragment size (1 - 1400) ... 1400 is default size");
+        Console.WriteLine("/clear           -> clears the console");
         Console.WriteLine("\n==============================================================\n");
     }
 	static void PrintStatusMenu() {
         Console.WriteLine("\n==============================================================\n");
+		Console.WriteLine($"[i] Destination IPv4: {remoteEndPoint.Address}");
         Console.WriteLine($"[i] Fragment size: {FRAGMENT_SIZE}");
         Console.WriteLine($"[i] Last Sent packet:");
         Console.WriteLine($"\t[Data] {Encoding.ASCII.GetString(lastSent.Data.ToArray())}");

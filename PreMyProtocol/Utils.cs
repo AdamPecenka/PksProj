@@ -4,31 +4,20 @@ namespace PreMyProtocol;
 
 public class Utils {
 
-	private const int HEADER_SIZE = 8;
+	private const int HEADER_SIZE = 9;
 	private const ushort STD_POLYNOM = 0x1021;
 	private const ushort MSB = 0x8000;
 
 	public MyHeader GetHeader(byte[] packet) {
+        MyHeader decodedHeader = new MyHeader {
+            Flags = packet[0],
+            FragTotal = [ packet[1], packet[2], packet[3] ],
+            SeqNum = [packet[4], packet[5], packet[6]],
+            Crc16 = BitConverter.ToUInt16(packet, 7),
+            Data = new List<byte>(packet.Skip(HEADER_SIZE).ToArray())
+        };
 
-        MyHeader decodedHeader = new MyHeader();
-
-        decodedHeader.Flags = packet[0];
-        decodedHeader.FragTotal = packet[2];
-
-        // Copy the SeqNum which is 3 bytes
-        decodedHeader.SeqNum = new byte[3];
-        Array.Copy(packet, 3, decodedHeader.SeqNum, 0, 3);
-
-        decodedHeader.Crc16 = BitConverter.ToUInt16(packet, 6);
-
-        // Copy the remaining bytes to Data
-        int dataLength = packet.Length - HEADER_SIZE;
-        decodedHeader.Data = new List<byte>(dataLength);
-        for(int i = HEADER_SIZE; i < packet.Length; i++) {
-            decodedHeader.Data.Add(packet[i]);
-        }
-
-		return decodedHeader;
+        return decodedHeader;
     }
 
 	public byte[] GetByteArr(MyHeader msg) {
@@ -41,15 +30,22 @@ public class Utils {
         byte[] byteArray = new byte[totalLength];
 
         byteArray[0] = msg.Flags;
-        byteArray[2] = msg.FragTotal;
 
-        // Check if SeqNum is initialized and copy it
-        if(msg.SeqNum != null && msg.SeqNum.Length >= 3) {
-            Array.Copy(msg.SeqNum, 0, byteArray, 3, 3);
+        if(msg.FragTotal != null && msg.FragTotal.Length > 0) {
+            Array.Copy(msg.FragTotal, 0, byteArray, 1, 3);
         }
         else {
-            // Initialize SeqNum with zeros if it is null or too short
-            for(int i = 3; i < 6; i++) {
+            for(int i = 1; i <= 3; i++) {
+                byteArray[i] = 0;
+            }
+        }
+
+
+        if(msg.SeqNum != null && msg.SeqNum.Length > 0) {
+            Array.Copy(msg.SeqNum, 0, byteArray, 4, 3);
+        }
+        else {
+            for(int i = 4; i <= 6; i++) {
                 byteArray[i] = 0;
             }
         }

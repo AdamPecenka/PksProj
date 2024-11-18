@@ -13,25 +13,25 @@ public enum FlagsEnum {
 }
 
 public class MyHeader {
-	public byte Flags { get ; set; }
-	public byte FragTotal { get ; set; }
-	public byte[] SeqNum { get ; set; }		// 3 bytes required
-	public ushort Crc16 { get; set; }
-	public List<byte> Data { get; set; }
+    public byte Flags { get; set; }
+    public byte[] FragTotal { get; set; }
+    public byte[] SeqNum { get; set; }
+    public ushort Crc16 { get; set; }
+    public List<byte> Data { get; set; }
 
-	public MyHeader(byte flags, byte fragId, byte fragTotal, byte[] seqNum, ushort crc16, List<byte> data) {
-		Flags = flags;
-		FragTotal = fragTotal;
-		SeqNum = seqNum;
-		Crc16 = crc16;
-		Data = data;
-	}
+    public MyHeader(byte flags, byte[] fragTotal, byte[] seqNum, ushort crc16, List<byte> data) {
+        Flags = flags;
+        FragTotal = fragTotal;
+        SeqNum = seqNum;
+        Crc16 = crc16;
+        Data = data;
+    }
 
-	public MyHeader() {
-		Flags = 0;
-		FragTotal = 0;
-		SeqNum = [3];
-		Crc16 = 0;
-		Data = new List<byte>();
-	}
+    public MyHeader() {
+        Flags = 0;
+        FragTotal = new byte[3];
+        SeqNum = new byte[3];
+        Crc16 = 0;
+        Data = new List<byte>();
+    }
 }
