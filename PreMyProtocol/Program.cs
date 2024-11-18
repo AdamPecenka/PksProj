@@ -48,7 +48,7 @@ public class Program {
 
 		#endregion
 
-		// lebo C# nepodporuje dva porty na loopback
+		// lebo C# nepodporuje dva aktivne porty na loopback
 		sendingClient = destIpAddress == LOCALHOST
 			? sendingClient = new UdpClient()
 			: sendingClient = new UdpClient(sendingPort);
@@ -70,9 +70,11 @@ public class Program {
 		using UdpClient listenerClient = new UdpClient(listeningPort);
 		IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Any, listeningPort);
 		MyHeader headerToSend;
-		byte[] toBeFile = null;
+
+        Dictionary<int, byte[]> fragMap = new Dictionary<int, byte[]>();
 		int recievedFragCounter = 0;
 		int expectedFrags = 0;
+		int indexer = 0;
 		string fileName = null;
 
 		try {
@@ -95,13 +97,17 @@ public class Program {
 					case 2: // 0000 0010
 						Console.WriteLine("~ [ACK]");
 						Console.WriteLine("\n[?] Type /help to see commands and description\n");
+						Console.WriteLine("\n[!!!] Nezabudnite si nastavit cestu k priecinku na prijmanie suborov -> /help");
+						Console.WriteLine("\tBy default su nastavene priecinky na pocitaci autora\n");
 						break;
 
 					case 3: // 0000 0011
 						Console.WriteLine("~ [SYN,ACK]");
 						Console.WriteLine("\n[?] Type /help to see commands and description\n");
+                        Console.WriteLine("\n[!!!] Nezabudnite si nastavit cestu k priecinku na prijmanie suborov -> /help");
+                        Console.WriteLine("\tBy default su nastavene priecinky na pocitaci autora\n");
 
-						headerToSend = new MyHeader();
+                        headerToSend = new MyHeader();
 						headerToSend.Flags = (byte)FlagsEnum.ACK;
 						SendMessage(headerToSend);
 						break;
@@ -116,6 +122,34 @@ public class Program {
 						break;
 
 					case 64: // 0100 0000 - File
+
+						// z 3 bytov sa tazko spravi 32bit int....
+						byte[] seqNum32 = _utils.Create32bit(recievedHeader.SeqNum);
+                        byte[] fragTotal32 = _utils.Create32bit(recievedHeader.FragTotal);
+
+                        int seqNum = BitConverter.ToInt32(seqNum32);
+
+                        if(BitConverter.ToInt32(fragTotal32) > 0
+							&& seqNum == 0) {
+							
+                            expectedFrags = BitConverter.ToInt32(fragTotal32);
+							fragMap.EnsureCapacity(expectedFrags);
+							recievedFragCounter = expectedFrags;
+							fileName = Encoding.ASCII.GetString(recievedHeader.Data.ToArray());
+                        }
+						else {
+							if(indexer != expectedFrags) {
+								Console.WriteLine($"[+] {indexer}/{expectedFrags}");
+                                fragMap.Add(seqNum, recievedHeader.Data.ToArray());
+								indexer++;
+                            }
+							else {
+								var fullPath = Path.Combine(DESTINATION_FILE_PATH, fileName);
+								File.WriteAllBytes(fullPath, _utils.GetByteArrFromDict(fragMap));
+								Console.WriteLine($"\n[+] Recieved file: {fullPath}");
+                            }
+                        }
+						
 
                         break;
 					default:
@@ -150,7 +184,7 @@ public class Program {
 			string message = parts.Length > 1
 				? string.Join(" ", parts, 1, parts.Length - 1)
 				: "";
-			byte[] msgBytes = Encoding.ASCII.GetBytes(message);
+			byte[] msgBytes; 
 
 
             switch(command) {
@@ -163,7 +197,9 @@ public class Program {
                     return;
 
 				case "/msg":
-                    headerToSend = new MyHeader();
+                    msgBytes= Encoding.ASCII.GetBytes(message);
+                    
+					headerToSend = new MyHeader();
 					headerToSend.Flags = (byte)FlagsEnum.TEXT_MSG_TYPE;
 					headerToSend.Data.AddRange(msgBytes);
 					
@@ -171,6 +207,8 @@ public class Program {
 					break;
 
 				case "/dmsg":
+                    msgBytes= Encoding.ASCII.GetBytes(message);
+
                     headerToSend = new MyHeader();
 					headerToSend.Flags = (byte)FlagsEnum.TEXT_MSG_TYPE;
                     headerToSend.Data.AddRange(msgBytes);
@@ -180,19 +218,23 @@ public class Program {
 					break;
 
 				case "/file":
-					SendFile(message);
+					SendFile(message);		// message == file path
 					break;
 
-				case "/status":
+                case "/dfile":
+                    Console.WriteLine("[!] Under Construction");
+                    break;
+
+                case "/status":
 					PrintStatusMenu();
                     break;
 
-				case "/fragsize":
+				case "/setfsize":
 					try {
-                        int fragsize = int.Parse(message);
+                        int fragSize = int.Parse(message);
 
-                        if(fragsize >= 1 && fragsize <= 1400) {
-                            FRAGMENT_SIZE = fragsize;
+                        if(fragSize >= 1 && fragSize <= 1400) {
+                            FRAGMENT_SIZE = fragSize;
 						}
 						else {
                             Console.WriteLine("[!] Incorrect fragment size");
@@ -203,10 +245,17 @@ public class Program {
 					}
 					break;
 
-				case "/clear":
+                case "/setdir":
+					DESTINATION_FILE_PATH = message;
+                    break;
+
+                case "/clear":
 					Console.Clear();
 					break;
-				
+
+				case "\n":
+					break;
+
 				default:
 					Console.WriteLine("[!] Invalid command, use /help if you don't know what to do ;)");
 					break;
@@ -256,42 +305,54 @@ public class Program {
 		SendWhatever(sendBytes);
     }
 	static void SendFile(string path) {
-		MyHeader headerToSend;
+		MyHeader initFragment;
 
 		var fileName = Path.GetFileName(path);
 		var nameBytes = Encoding.ASCII.GetBytes(fileName);
 		var fileBytes = File.ReadAllBytes(path);
 		var len = fileBytes.Length;
 
-		headerToSend = new MyHeader() {
+		initFragment = new MyHeader() {
 			Flags = (byte)FlagsEnum.FILE_MSG_TYPE,
 			FragTotal = BitConverter.GetBytes(len),
-			SeqNum = new byte[3],
+			SeqNum = BitConverter.GetBytes(0),
 			Crc16 = _utils.GetCrc16(nameBytes),
 			Data = new List<byte>(nameBytes)
         };
 
         lastSent = new MyHeader() {
-            Flags = headerToSend.Flags,
-            FragTotal = headerToSend.FragTotal,
-            SeqNum = headerToSend.SeqNum,
-            Crc16 = headerToSend.Crc16,
-            Data = headerToSend.Data
+            Flags = initFragment.Flags,
+            FragTotal = initFragment.FragTotal,
+            SeqNum = initFragment.SeqNum,
+            Crc16 = initFragment.Crc16,
+            Data = initFragment.Data
         };
 
-        var sendNameBytes = _utils.GetByteArr(headerToSend);
-		SendWhatever(sendNameBytes);
+        var sendInitBytes = _utils.GetByteArr(initFragment);
+		SendWhatever(sendInitBytes);
 		
 		try {
             for(int i = 0; i < len; i++) {
 
                 byte[] singleByte = [fileBytes[i]];
 
-				headerToSend = new MyHeader() {
-					SeqNum = BitConverter.GetBytes(i + 1)
-				};
+                MyHeader fragment = new MyHeader() {
+                    Flags = (byte)FlagsEnum.FILE_MSG_TYPE,
+                    FragTotal = BitConverter.GetBytes(0),
+                    SeqNum = BitConverter.GetBytes(i + 1),
+                    Crc16 = _utils.GetCrc16(singleByte),
+                    Data = new List<byte>(singleByte)
+                };
 
-                var sendFragBytes = _utils.GetByteArr(headerToSend);
+                lastSent = new MyHeader() {
+                    Flags = fragment.Flags,
+                    FragTotal = fragment.FragTotal,
+                    SeqNum = fragment.SeqNum,
+                    Crc16 = fragment.Crc16,
+                    Data = fragment.Data
+                };
+
+                var sendFragBytes = _utils.GetByteArr(fragment);
                 SendWhatever(sendFragBytes);
             }
         }
@@ -299,7 +360,6 @@ public class Program {
             Console.WriteLine($"[!] {e}");
 		}
 	}
-
 	static void HandleRecievedMessage(MyHeader packet) {
 		ushort expectedCrc16 = _utils.GetCrc16(packet.Data.ToArray());
 		
@@ -319,22 +379,25 @@ public class Program {
 
 	static void PrintHelpMenu() {
         Console.WriteLine("\n==============================================================\n");
-        Console.WriteLine(@"[testDir1]      -> C:\Users\adamp\Skola\ZS2\PKS\testDir1\testFile");
-        Console.WriteLine(@"[testDir2]      -> C:\Users\adamp\Skola\ZS2\PKS\testDir2\testFile");
-        Console.WriteLine("/help            -> display help menu");
-		Console.WriteLine("/exit            -> close the connection for both sides ");
-		Console.WriteLine("/msg [string]    -> send regular text message");
-		Console.WriteLine("/dmsg [string]   -> send damaged text message");
-		Console.WriteLine("/file [path]     -> send file");
-		Console.WriteLine("/dfile [path]    -> send damaged file");
-		Console.WriteLine("/status			  -> display some info");
-		Console.WriteLine("/fragsize [int]	  -> set fragment size (1 - 1400) ... 1400 is default size");
-        Console.WriteLine("/clear           -> clears the console");
+        Console.WriteLine(@"[testDir1]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir1\testFile");
+        Console.WriteLine(@"[testDir1]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir1\pic.jpeg");
+        Console.WriteLine(@"[testDir2]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir2");
+        Console.WriteLine("/help				-> display help menu");
+		Console.WriteLine("/status				-> display some info");
+		Console.WriteLine("/exit				-> close the connection for both sides ");
+		Console.WriteLine("/msg [string]		-> send regular text message");
+		Console.WriteLine("/dmsg [string]		-> send damaged text message");
+		Console.WriteLine("/file [path]		-> send file");
+		Console.WriteLine("/dfile [path]		-> send damaged file");
+		Console.WriteLine("/setfsize [int]		-> set fragment size (1 - 1400) ... 1400 is default size");
+		Console.WriteLine("/setdir [path]		-> set local directory for recieving");
+        Console.WriteLine("/clear				-> clears the console");
         Console.WriteLine("\n==============================================================\n");
     }
 	static void PrintStatusMenu() {
         Console.WriteLine("\n==============================================================\n");
-		Console.WriteLine($"[i] Destination IPv4: {remoteEndPoint.Address}");
+		Console.WriteLine($"[i] Recieving IPv4: {remoteEndPoint.Address}");
+		Console.WriteLine($"[i] Local dest dir: {DESTINATION_FILE_PATH}");
         Console.WriteLine($"[i] Fragment size: {FRAGMENT_SIZE}");
         Console.WriteLine($"[i] Last Sent packet:");
         Console.WriteLine($"\t[Data] {Encoding.ASCII.GetString(lastSent.Data.ToArray())}");
@@ -342,7 +405,7 @@ public class Program {
         Console.WriteLine($"\t[Flags] 0x{lastSent.Flags:X2}");
         Console.WriteLine("\n==============================================================\n");
     }
-	public static void SendWhatever(byte[] bytes) {
+	static void SendWhatever(byte[] bytes) {
         try {
             sendingClient.Send(bytes, bytes.Length, remoteEndPoint);
         }

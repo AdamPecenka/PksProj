@@ -50,13 +50,32 @@ public class Utils {
             }
         }
 
-        BitConverter.GetBytes(msg.Crc16).CopyTo(byteArray, 6);
+        BitConverter.GetBytes(msg.Crc16).CopyTo(byteArray, 7);
 
         if(msg.Data != null) {
             msg.Data.CopyTo(byteArray, HEADER_SIZE);
         }
 
         return byteArray;
+    }
+
+    public byte[] GetByteArrFromDict(Dictionary<int, byte[]> dictionary) {
+        
+        int totalLength = 0;
+        foreach(var kvp in dictionary) {
+            totalLength += kvp.Value.Length;
+        }
+
+        byte[] result = new byte[totalLength];
+        int currentIndex = 0;
+
+        foreach(var kvp in dictionary) {
+            byte[] value = kvp.Value;
+            Array.Copy(value, 0, result, currentIndex, value.Length);
+            currentIndex += value.Length;
+        }
+
+        return result;
     }
 
 	public ushort GetCrc16(byte[] data) {
@@ -74,4 +93,16 @@ public class Utils {
 
 		return crc;
 	}
+
+    // Lebo BitConverter potrebuje 4 byty pre integer...
+    public byte[] Create32bit(byte[] bytes) {
+        
+        byte[] res = new byte[4];
+        res[0] = 0;
+        res[1] = bytes[0];
+        res[2] = bytes[1];
+        res[3] = bytes[2];
+
+        return res;
+    }
 }
