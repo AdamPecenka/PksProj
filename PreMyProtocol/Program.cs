@@ -20,8 +20,6 @@ public class Program {
 	static MyHeader lastSent = new();
 	#endregion
 
-	// change
-
     static void Main(string[] args) {
 
 		#region Initial prompting
