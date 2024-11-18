@@ -96,13 +96,8 @@ public class Utils {
 
     // Lebo BitConverter potrebuje 4 byty pre integer...
     public byte[] Create32bit(byte[] bytes) {
-        
         byte[] res = new byte[4];
-        res[0] = 0;
-        res[1] = bytes[0];
-        res[2] = bytes[1];
-        res[3] = bytes[2];
-
+        Array.Copy(bytes, 0, res, 0, bytes.Length);
         return res;
     }
 }

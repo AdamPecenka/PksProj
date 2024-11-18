@@ -12,7 +12,7 @@ public class Program {
 	static bool HAND_SHAKEN = false;
 	static bool IS_CONNECTION = true;
 	static int FRAGMENT_SIZE = 1400;
-	static string DESTINATION_FILE_PATH = @"C:\Users\adamp\Skola\ZS2\PKS\testDir2";
+	static string DESTINATION_FILE_PATH = @"C:\Users\ap\Desktop\testDir2";
 
 	static UdpClient sendingClient;         // sending port
 	static IPEndPoint remoteEndPoint;
@@ -74,7 +74,6 @@ public class Program {
         Dictionary<int, byte[]> fragMap = new Dictionary<int, byte[]>();
 		int recievedFragCounter = 0;
 		int expectedFrags = 0;
-		int indexer = 0;
 		string fileName = null;
 
 		try {
@@ -123,9 +122,15 @@ public class Program {
 
 					case 64: // 0100 0000 - File
 
-						// z 3 bytov sa tazko spravi 32bit int....
-						byte[] seqNum32 = _utils.Create32bit(recievedHeader.SeqNum);
-                        byte[] fragTotal32 = _utils.Create32bit(recievedHeader.FragTotal);
+						byte[] seqNum32 = new byte[4];
+						byte[] fragTotal32 = new byte[4];
+                        // z 3 bytov sa tazko spravi 32bit int....
+                        if(recievedHeader.SeqNum.Length != 4) { 
+							seqNum32 = _utils.Create32bit(recievedHeader.SeqNum);
+						}
+						if(recievedHeader.FragTotal.Length != 4) {
+							fragTotal32 = _utils.Create32bit(recievedHeader.FragTotal);
+						}
 
                         int seqNum = BitConverter.ToInt32(seqNum32);
 
@@ -137,19 +142,17 @@ public class Program {
 							recievedFragCounter = expectedFrags;
 							fileName = Encoding.ASCII.GetString(recievedHeader.Data.ToArray());
                         }
-						else {
-							if(indexer != expectedFrags) {
-								Console.WriteLine($"[+] {indexer}/{expectedFrags}");
-                                fragMap.Add(seqNum, recievedHeader.Data.ToArray());
-								indexer++;
-                            }
-							else {
-								var fullPath = Path.Combine(DESTINATION_FILE_PATH, fileName);
-								File.WriteAllBytes(fullPath, _utils.GetByteArrFromDict(fragMap));
-								Console.WriteLine($"\n[+] Recieved file: {fullPath}");
-                            }
+						else if(seqNum != expectedFrags) {
+							Console.WriteLine($"[+] {seqNum}/{expectedFrags}");
+
+                            fragMap.Add(seqNum, recievedHeader.Data.ToArray());
+						}
+                        else {
+                            var fullPath = Path.Combine(DESTINATION_FILE_PATH, fileName);
+                            File.WriteAllBytes(fullPath, _utils.GetByteArrFromDict(fragMap));
+                            Console.WriteLine($"\n[+] Recieved file: {fullPath}");
                         }
-						
+
 
                         break;
 					default:
@@ -380,8 +383,8 @@ public class Program {
 	static void PrintHelpMenu() {
         Console.WriteLine("\n==============================================================\n");
         Console.WriteLine(@"[testDir1]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir1\testFile");
-        Console.WriteLine(@"[testDir1]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir1\pic.jpeg");
-        Console.WriteLine(@"[testDir2]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir2");
+        Console.WriteLine(@"[testDir1]			-> C:\Users\ap\Desktop\testDir1\pic.jpeg");
+        Console.WriteLine(@"[testDir2]			-> C:\Users\ap\Desktop\testDir2");
         Console.WriteLine("/help				-> display help menu");
 		Console.WriteLine("/status				-> display some info");
 		Console.WriteLine("/exit				-> close the connection for both sides ");
