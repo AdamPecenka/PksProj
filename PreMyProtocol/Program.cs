@@ -11,8 +11,8 @@ public class Program {
 
 	static bool HAND_SHAKEN = false;
 	static bool IS_CONNECTION = true;
-	static int FRAGMENT_SIZE = 1400;
-	static string DESTINATION_FILE_PATH = @"C:\Users\ap\Desktop\testDir2";
+	static int FRAGMENT_SIZE = 1000;
+	static string DESTINATION_FILE_PATH = @"C:\Users\adamp\Skola\ZS2\PKS\testDir2";
 
 	static UdpClient sendingClient;         // sending port
 	static IPEndPoint remoteEndPoint;
@@ -134,26 +134,24 @@ public class Program {
 
                         int seqNum = BitConverter.ToInt32(seqNum32);
 
-                        if(BitConverter.ToInt32(fragTotal32) > 0
-							&& seqNum == 0) {
+                        if(seqNum == 0) {
 							
                             expectedFrags = BitConverter.ToInt32(fragTotal32);
 							fragMap.EnsureCapacity(expectedFrags);
 							recievedFragCounter = expectedFrags;
 							fileName = Encoding.ASCII.GetString(recievedHeader.Data.ToArray());
                         }
-						else if(seqNum != expectedFrags) {
-							Console.WriteLine($"[+] {seqNum}/{expectedFrags}");
+						if(seqNum != 0) {
+							Console.WriteLine($"[+] {seqNum - 1}/{expectedFrags}");
+							fragMap.Add(seqNum - 1, recievedHeader.Data.ToArray());
 
-                            fragMap.Add(seqNum, recievedHeader.Data.ToArray());
-						}
-                        else {
-                            var fullPath = Path.Combine(DESTINATION_FILE_PATH, fileName);
-                            File.WriteAllBytes(fullPath, _utils.GetByteArrFromDict(fragMap));
-                            Console.WriteLine($"\n[+] Recieved file: {fullPath}");
+							if((seqNum - 1) == expectedFrags) {
+                                var fullPath = Path.Combine(DESTINATION_FILE_PATH, fileName);
+                                File.WriteAllBytes(fullPath, _utils.GetByteArrFromDict(fragMap));
+                                Console.WriteLine($"\n[+] Recieved file: {fullPath}");
+                                fragMap.Clear();
+                            }
                         }
-
-
                         break;
 					default:
 						Console.WriteLine("[!!!] Picovinu som dostal, pomoc");
@@ -315,9 +313,13 @@ public class Program {
 		var fileBytes = File.ReadAllBytes(path);
 		var len = fileBytes.Length;
 
-		initFragment = new MyHeader() {
+		List<byte> listFileBytes = new List<byte>(fileBytes);
+        var fragments = listFileBytes.Chunk(FRAGMENT_SIZE);
+
+
+        initFragment = new MyHeader() {
 			Flags = (byte)FlagsEnum.FILE_MSG_TYPE,
-			FragTotal = BitConverter.GetBytes(len),
+			FragTotal = BitConverter.GetBytes(fragments.Count() - 1),
 			SeqNum = BitConverter.GetBytes(0),
 			Crc16 = _utils.GetCrc16(nameBytes),
 			Data = new List<byte>(nameBytes)
@@ -333,18 +335,18 @@ public class Program {
 
         var sendInitBytes = _utils.GetByteArr(initFragment);
 		SendWhatever(sendInitBytes);
-		
-		try {
-            for(int i = 0; i < len; i++) {
 
-                byte[] singleByte = [fileBytes[i]];
 
+		int idx = 0;
+		foreach(var frag in fragments) {
+            Console.WriteLine($"[+] SeqNum: {idx}; Size: {frag.Length}");
+			try {
                 MyHeader fragment = new MyHeader() {
                     Flags = (byte)FlagsEnum.FILE_MSG_TYPE,
                     FragTotal = BitConverter.GetBytes(0),
-                    SeqNum = BitConverter.GetBytes(i + 1),
-                    Crc16 = _utils.GetCrc16(singleByte),
-                    Data = new List<byte>(singleByte)
+                    SeqNum = BitConverter.GetBytes(idx + 1),
+                    Crc16 = _utils.GetCrc16(frag),
+                    Data = new List<byte>(frag)
                 };
 
                 lastSent = new MyHeader() {
@@ -357,12 +359,13 @@ public class Program {
 
                 var sendFragBytes = _utils.GetByteArr(fragment);
                 SendWhatever(sendFragBytes);
+			}
+            catch(Exception e) {
+                Console.WriteLine($"[!] {e}");
             }
+            idx++;
         }
-        catch(Exception e) {
-            Console.WriteLine($"[!] {e}");
-		}
-	}
+    }
 	static void HandleRecievedMessage(MyHeader packet) {
 		ushort expectedCrc16 = _utils.GetCrc16(packet.Data.ToArray());
 		
@@ -383,8 +386,9 @@ public class Program {
 	static void PrintHelpMenu() {
         Console.WriteLine("\n==============================================================\n");
         Console.WriteLine(@"[testDir1]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir1\testFile");
-        Console.WriteLine(@"[testDir1]			-> C:\Users\ap\Desktop\testDir1\pic.jpeg");
-        Console.WriteLine(@"[testDir2]			-> C:\Users\ap\Desktop\testDir2");
+        Console.WriteLine(@"[testDir1]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir1\picSmall.png");
+        Console.WriteLine(@"[testDir1]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir1\test.txt");
+        Console.WriteLine(@"[testDir2]			-> C:\Users\adamp\Skola\ZS2\PKS\testDir2");
         Console.WriteLine("/help				-> display help menu");
 		Console.WriteLine("/status				-> display some info");
 		Console.WriteLine("/exit				-> close the connection for both sides ");
