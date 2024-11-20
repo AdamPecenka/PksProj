@@ -62,7 +62,7 @@ public class Utils {
     public byte[] GetByteArrFromDict(Dictionary<int, byte[]> dictionary) {
         
         int totalLength = 0;
-        foreach(var kvp in dictionary) {
+        foreach(KeyValuePair<int, byte[]> kvp in dictionary) {
             totalLength += kvp.Value.Length;
         }
 
