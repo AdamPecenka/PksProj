@@ -1,14 +1,14 @@
-﻿using System.Text;
-
-namespace PreMyProtocol;
+﻿namespace PreMyProtocol;
 
 public class Utils {
 
 	private const int HEADER_SIZE = 9;
 	private const ushort STD_POLYNOM = 0x1021;
+    private static Random rand = new Random();
 	private const ushort MSB = 0x8000;
+    private const float PROB = 0.33f;
 
-	public MyHeader GetHeader(byte[] packet) {
+    public MyHeader GetHeader(byte[] packet) {
         MyHeader decodedHeader = new MyHeader {
             Flags = packet[0],
             FragTotal = [ packet[1], packet[2], packet[3] ],
@@ -99,5 +99,14 @@ public class Utils {
         byte[] res = new byte[4];
         Array.Copy(bytes, 0, res, 0, bytes.Length);
         return res;
+    }
+
+    public void DamageRandomFragments(List<byte> data) {
+
+        for(int i = 0; i < data.Count; i++) {
+            if(rand.NextSingle() < PROB){
+                data[i] ^= 0x01; 
+            }
+        }
     }
 }
