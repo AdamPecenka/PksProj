@@ -1,4 +1,6 @@
-﻿namespace PreMyProtocol;
+﻿using System.Text;
+
+namespace PreMyProtocol;
 
 public class Utils {
 
@@ -109,4 +111,28 @@ public class Utils {
             }
         }
     }
+
+    public void PrintHelpMenu() {
+        Console.WriteLine("\n==============================================================\n");
+        Console.WriteLine(@"C:\Users\adamp\Skola\ZS2\PKS\testDir1\testFile");
+        Console.WriteLine(@"C:\Users\adamp\Skola\ZS2\PKS\testDir1\picSmall.png");
+        Console.WriteLine(@"C:\Users\adamp\Skola\ZS2\PKS\testDir1\stressTest.pptx");
+        Console.WriteLine(@"C:\Users\adamp\Skola\ZS2\PKS\testDir1\test.txt");
+        Console.WriteLine(@"C:\Users\adamp\Skola\ZS2\PKS\testDir1\2MB.txt");
+        Console.WriteLine(@"C:\Users\adamp\Skola\ZS2\PKS\testDir1\sub1400.txt");
+        Console.WriteLine(@"C:\Users\adamp\Skola\ZS2\PKS\testDir2");
+        Console.WriteLine("/help				-> display help menu");
+        Console.WriteLine("/status				-> display some info");
+        Console.WriteLine("/exit				-> close the connection for both sides ");
+        Console.WriteLine("/msg [string]		-> send regular text message");
+        Console.WriteLine("/dmsg [string]		-> send damaged text message");
+        Console.WriteLine("/file [path]		-> send file");
+        Console.WriteLine("/dfile [path]		-> send damaged file");
+        Console.WriteLine("/setfsize [int]		-> set fragment size (1 - 1400) ... 1400 is default size");
+        Console.WriteLine("/setdir [path]		-> set local directory for recieving");
+        Console.WriteLine("/clear				-> clears the console");
+        Console.WriteLine("\n==============================================================\n");
+    }
+
+    
 }
