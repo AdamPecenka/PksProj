@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Diagnostics;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 #nullable disable
@@ -8,12 +9,14 @@ public class Program {
     
 	#region Globalky
     const string LOCALHOST = "127.0.0.1";
-    private const float PROB = 0.33f;
+    private const float PROB = 0.1f;
 
     static bool ACK_RECV = false;
+    static bool INIT_HAND_SHAKEN = false;
     static bool HAND_SHAKEN = false;
 	static bool IS_CONNECTION = true;
 	static int FRAGMENT_SIZE = 1400;
+    static int MOD = 5;
 	static string DESTINATION_FILE_PATH = @"C:\Users\adamp\Skola\ZS2\PKS\testDir2";
     static bool KEEP_ALIVE = false;
     static int MAX_KEEP_ALIVE_RETRIES = 3;
@@ -77,8 +80,8 @@ public class Program {
 
     static void StartListener() {
         MyHeader headerToSend;
-
-        Dictionary<int, byte[]> fragMap = new Dictionary<int, byte[]>();
+        List<(int, byte[])> recvBuff = new List<(int, byte[])>();
+        Stopwatch stopwatch = new Stopwatch();
         int recievedFragCounter = 0;
         int expectedFrags = 0;
         string fileName = null;
@@ -88,39 +91,14 @@ public class Program {
 
         try {
             while(IS_CONNECTION) {
-                // Check if it's time to send a keep-alive message
-                //if(KEEP_ALIVE && (DateTime.Now - lastKeepAliveSent).TotalSeconds >= KEEP_ALIVE_INTERVAL) {
-                //    MyHeader keepAliveHeader = new MyHeader();
-                //    keepAliveHeader.Flags = (byte)FlagsEnum.KEEP_ALIVE;
-                //    SendMessage(keepAliveHeader);
-                //    lastKeepAliveSent = DateTime.Now;
-                //    keepAliveRetries++;
-
-                //    if(keepAliveRetries >= MAX_KEEP_ALIVE_RETRIES) {
-                //        Console.WriteLine("[!] No response to keep-alive messages, closing connection.");
-                //        IS_CONNECTION = false;
-                //        sendingClient.Close();
-                //        listenerClient.Close();
-                //        break;
-                //    }
-                //}
-
                 byte[] receivedBytes = listenerClient.Receive(ref localEndPoint);
                 MyHeader recievedHeader = new MyHeader();
                 recievedHeader = _utils.GetHeader(receivedBytes);
 
-                
-
-
                 switch(recievedHeader.Flags) {
                     case 1: // 0000 0001
-                        HAND_SHAKEN = true;
+                        INIT_HAND_SHAKEN = true;
                         Console.WriteLine("~ [SYN]");
-
-                        Console.WriteLine("\n[?] Type /help to see commands and description\n");
-                        Console.WriteLine("\n[!!!] Nezabudnite si nastavit cestu k priecinku na prijmanie suborov -> /help");
-                        Console.WriteLine("\tBy default su nastavene priecinky na pocitaci autora\n");
-
                         headerToSend = new MyHeader();
                         headerToSend.Flags = (byte)(FlagsEnum.SYN | FlagsEnum.ACK);
                         SendMessage(headerToSend);
@@ -133,49 +111,33 @@ public class Program {
 
                     case 3: // 0000 0011
                         Console.WriteLine("~ [SYN,ACK]");
-                        Console.WriteLine("\n[?] Type /help to see commands and description\n");
-                        Console.WriteLine("\n[!!!] Nezabudnite si nastavit cestu k priecinku na prijmanie suborov -> /help");
-                        Console.WriteLine("\tBy default su nastavene priecinky na pocitaci autora\n");
-
                         headerToSend = new MyHeader();
                         headerToSend.Flags = (byte)FlagsEnum.ACK;
                         SendMessage(headerToSend);
-
                         KEEP_ALIVE = true;
                         lastKeepAliveSent = DateTime.Now;
                         break;
 
-                    case 4: //0000 0100
+                    case 4:
                         Console.WriteLine("~ [NACK]");
-                        SendMessage(lastSent);
+                        ResendFragment(lastSent);
                         break;
 
-                    case 16: //0001 0000 - KEEP_ALIVE
+                    case 16: // 0001 0000 - KEEP_ALIVE
                         if(KEEP_ALIVE == false) {
                             KEEP_ALIVE = true;
                         }
 
                         keepAliveRetries = 0;
                         lastKeepAliveSent = DateTime.Now;
-
                         Console.WriteLine("~ [KA]");
                         headerToSend = new MyHeader();
                         headerToSend.Flags = (byte)(FlagsEnum.KEEP_ALIVE | FlagsEnum.ACK);
                         SendMessage(headerToSend);
                         break;
 
-                    case 18: //0001 0010 - KEEP_ALIVE, ACK
-                        Console.WriteLine("~ [KA, ACK]");
-                        keepAliveRetries = 0;
-                        break;
-
-                    case 32: // 0010 0000 - Text
+                    case 32:
                         HandleRecievedMessage(recievedHeader);
-                        break;
-
-                    case 36: // 0010 0100 - Subor
-                        Console.WriteLine("~ [NACK FILE]");
-                        SendMessage(lastSent);
                         break;
 
                     case 64: // 0100 0000 - File
@@ -187,52 +149,65 @@ public class Program {
 
                         int seqNum = BitConverter.ToInt32(seqNum32);
 
-                        #region Checking CRC
+                        #region CRC Check
                         ushort expectedCrc16 = _utils.GetCrc16(recievedHeader.Data.ToArray());
                         if(expectedCrc16 != recievedHeader.Crc16) {
-                            MyHeader reply = new();
+                            MyHeader reply = new MyHeader();
                             reply.Flags = (byte)FlagsEnum.NACK;
-
                             SendMessage(reply);
 
-                            Console.WriteLine("[-] Recieved damaged fragment, sending again...");
+                            Console.WriteLine($"[-] Recieved damaged fragment (Seq: {seqNum - 1}), sending again...");
                             continue;
                         }
                         else if(expectedCrc16 == recievedHeader.Crc16 && ACK_RECV != true) {
-                            MyHeader reply = new();
+                            MyHeader reply = new MyHeader();
                             reply.Flags = (byte)FlagsEnum.ACK;
-
                             SendMessage(reply);
                         }
                         #endregion
 
                         if(seqNum == 0) {
-
+                            stopwatch.Start();
                             expectedFrags = BitConverter.ToInt32(fragTotal32);
-                            fragMap.EnsureCapacity(expectedFrags);
+                            recvBuff.EnsureCapacity(expectedFrags);
                             recievedFragCounter = expectedFrags;
                             fileName = Encoding.ASCII.GetString(recievedHeader.Data.ToArray());
                         }
                         if(seqNum != 0) {
                             Console.WriteLine($"[+] {seqNum - 1}/{expectedFrags}");
-                            fragMap.Add(seqNum - 1, recievedHeader.Data.ToArray());
+                            recvBuff.Add((seqNum - 1, recievedHeader.Data.ToArray()));
 
+                            // If all fragments received
                             if((seqNum - 1) == expectedFrags) {
+                                // Sort the fragments by their sequence number before concatenating
+                                var sortedList = recvBuff.OrderBy(x => x.Item1).ToList();
+
+                                // Concatenate the sorted data into a single byte array
+                                List<byte> fullFileData = new List<byte>();
+                                foreach(var (seq, data) in sortedList) {
+                                    fullFileData.AddRange(data);
+                                }
+
                                 var fullPath = Path.Combine(DESTINATION_FILE_PATH, fileName);
-                                File.WriteAllBytes(fullPath, _utils.GetByteArrFromDict(fragMap));
-                                Console.WriteLine($"\n[+] Recieved file: {fullPath}");
-                                fragMap.Clear();
+                                File.WriteAllBytes(fullPath, fullFileData.ToArray());
+
+                                stopwatch.Stop();
+                                TimeSpan ts = stopwatch.Elapsed;
+                                string elapsedTime =
+                                    String.Format("{0:00}:{1:00}.{2:00}", ts.Minutes, ts.Seconds, ts.Milliseconds / 10);
+
+                                Console.WriteLine($"\n[t] {elapsedTime}");
+                                Console.WriteLine($"[+] Recieved file: {fullPath}");
+
+                                recvBuff.Clear();
+                                stopwatch.Reset();
                             }
-                        }                        
+                        }
                         break;
+
                     default:
                         Console.WriteLine("[!!!] Picovinu som dostal, pomoc");
                         break;
-                }
-
-                if(KEEP_ALIVE) {
-                    lastKeepAliveSent = DateTime.Now;
-                    keepAliveRetries = 0;
                 }
             }
         }
@@ -246,7 +221,7 @@ public class Program {
         MyHeader headerToSend;
 
         Thread.Sleep(5000);
-        if(!HAND_SHAKEN) {
+        if(!INIT_HAND_SHAKEN) {
             headerToSend = new MyHeader();
             headerToSend.Flags = (byte)FlagsEnum.SYN;
             SendMessage(headerToSend);
@@ -269,10 +244,6 @@ public class Program {
                 case "/help":
                     _utils.PrintHelpMenu();
                     break;
-
-                case "/exit":
-                    Console.WriteLine("[!] Under Construction");
-                    return;
 
                 case "/msg":
                     msgBytes = Encoding.ASCII.GetBytes(message);
@@ -312,6 +283,7 @@ public class Program {
 
                         if(fragSize >= 1 && fragSize <= 1400) {
                             FRAGMENT_SIZE = fragSize;
+                            Console.WriteLine($"[+] Fragment size set to: {FRAGMENT_SIZE}");
                         }
                         else {
                             Console.WriteLine("[!] Incorrect fragment size");
@@ -324,6 +296,13 @@ public class Program {
 
                 case "/setdir":
                     DESTINATION_FILE_PATH = message;
+                    Console.WriteLine($"[+] Destination set to: {DESTINATION_FILE_PATH}");
+                    break;
+
+                case "/setmodulo":
+                    int newMod = int.Parse(message);
+                    MOD = newMod;
+                    Console.WriteLine($"[+] Destination set to: {DESTINATION_FILE_PATH}");
                     break;
 
                 case "/clear":
@@ -342,7 +321,7 @@ public class Program {
 
 
     static void SendMessage(MyHeader message) {
-		
+
 		if(message.Data != null) {
 			message.Crc16 = _utils.GetCrc16(message.Data.ToArray());
 		}
@@ -358,6 +337,29 @@ public class Program {
 		var sendBytes = _utils.GetByteArr(message);
 		SendWhatever(sendBytes);
 	}
+    static void ResendFragment(MyHeader message) {
+        byte[] seqNum32 = new byte[4];
+        seqNum32 = _utils.Create32bit(message.SeqNum);
+
+        int seqNum = BitConverter.ToInt32(seqNum32);
+
+        Console.WriteLine($"[<<] SeqNum: {seqNum - 1}");
+
+        if(message.Data != null) {
+            message.Crc16 = _utils.GetCrc16(message.Data.ToArray());
+        }
+
+        lastSent = new MyHeader() {
+            Flags = message.Flags,
+            FragTotal = message.FragTotal,
+            SeqNum = message.SeqNum,
+            Crc16 = message.Crc16,
+            Data = message.Data
+        };
+
+        var sendBytes = _utils.GetByteArr(message);
+        SendWhatever(sendBytes);
+    }
     static void SendDamagedMessage(MyHeader message) {
 
         if(message.Data != null) {
@@ -439,15 +441,14 @@ public class Program {
                 Console.WriteLine("[!] Failed to send fragment" + e);
             }
 
-            while(!ACK_RECV) {
-                Thread.Yield();
-            }
-            ACK_RECV = false;
+            //while(!ACK_RECV) {
+            //    Thread.Yield();
+            //}
+            //ACK_RECV = false;
 
             idx++;
         }
     }
-
     static void SendDamagedFile(string path) {
         MyHeader initFragment;
 
@@ -481,7 +482,7 @@ public class Program {
 		
 		int idx = 0;
         foreach(var frag in fragments) {
-            Console.WriteLine($"[+] SeqNum: {idx}; Size: {frag.Length}");
+            Console.WriteLine($"[<] SeqNum: {idx}; Size: {frag.Length}");
             try {
                 MyHeader fragment = new MyHeader() {
                     Flags = (byte)FlagsEnum.FILE_MSG_TYPE,
@@ -499,13 +500,14 @@ public class Program {
                     Data = fragment.Data
                 };
 
-				List<byte> damagedData;
-                if(rand.NextSingle() < PROB) {
-					damagedData = new List<byte>(fragment.Data);
+                if(idx % MOD == 1) {
+                    List<byte> damagedData;
+                    damagedData = new List<byte>(fragment.Data);
                     _utils.DamageRandomFragments(damagedData);
-					fragment.Data = damagedData;
+                    fragment.Data = damagedData;
+                    
                 }
-
+				
                 var sendFragBytes = _utils.GetByteArr(fragment);
                 SendWhatever(sendFragBytes);
             }
@@ -514,7 +516,9 @@ public class Program {
             }
 
             while(!ACK_RECV) {
-                Thread.Yield();
+                Thread.Sleep(1);
+                //Thread.Yield();
+
             }
             ACK_RECV = false;
 
@@ -549,14 +553,26 @@ public class Program {
         }
     }
     static void PrintStatusMenu() {
+        byte[] seqNum32 = new byte[4];
+        byte[] fragTotal32 = new byte[4];
+
+        seqNum32 = _utils.Create32bit(lastSent.SeqNum);
+        fragTotal32 = _utils.Create32bit(lastSent.FragTotal);
+
+        int seqNum = BitConverter.ToInt32(seqNum32);
+        int fragTotal = BitConverter.ToInt32(fragTotal32);
+
         Console.WriteLine("\n==============================================================\n");
         Console.WriteLine($"[i] Recieving IPv4: {remoteEndPoint.Address}");
         Console.WriteLine($"[i] Local dest dir: {DESTINATION_FILE_PATH}");
         Console.WriteLine($"[i] Fragment size: {FRAGMENT_SIZE}");
+        Console.WriteLine($"[i] Fragment modulo: {MOD}");
         Console.WriteLine($"[i] Last Sent packet:");
-        Console.WriteLine($"\t[Data] {Encoding.ASCII.GetString(lastSent.Data.ToArray())}");
-        Console.WriteLine($"\t[CRC] 0x{lastSent.Crc16:X4}");
         Console.WriteLine($"\t[Flags] 0x{lastSent.Flags:X2}");
+        Console.WriteLine($"\t[FragTotal] {fragTotal}");
+        Console.WriteLine($"\t[SeqNum] {seqNum}");
+        Console.WriteLine($"\t[CRC] 0x{lastSent.Crc16:X4}");
+        Console.WriteLine($"\t[Data] {Encoding.ASCII.GetString(lastSent.Data.ToArray())}");
         Console.WriteLine("\n==============================================================\n");
     }
 }

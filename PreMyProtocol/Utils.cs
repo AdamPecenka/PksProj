@@ -1,6 +1,4 @@
-﻿using System.Text;
-
-namespace PreMyProtocol;
+﻿namespace PreMyProtocol;
 
 public class Utils {
 
@@ -123,16 +121,14 @@ public class Utils {
         Console.WriteLine(@"C:\Users\adamp\Skola\ZS2\PKS\testDir2");
         Console.WriteLine("/help				-> display help menu");
         Console.WriteLine("/status				-> display some info");
-        Console.WriteLine("/exit				-> close the connection for both sides ");
         Console.WriteLine("/msg [string]		-> send regular text message");
         Console.WriteLine("/dmsg [string]		-> send damaged text message");
         Console.WriteLine("/file [path]		-> send file");
         Console.WriteLine("/dfile [path]		-> send damaged file");
         Console.WriteLine("/setfsize [int]		-> set fragment size (1 - 1400) ... 1400 is default size");
         Console.WriteLine("/setdir [path]		-> set local directory for recieving");
+        Console.WriteLine("/setmodulo [int]	-> set how often will fragments get damaged (default: 5)");
         Console.WriteLine("/clear				-> clears the console");
         Console.WriteLine("\n==============================================================\n");
     }
-
-    
 }
