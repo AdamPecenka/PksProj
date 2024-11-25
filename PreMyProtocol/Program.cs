@@ -17,6 +17,7 @@ public class Program {
     static bool INIT_HAND_SHAKEN = false;
     static bool HAND_SHAKE_DONE = false;
     static bool IS_CONNECTION = true;
+    static bool CAN_SEND_KA = true;
     static int FRAGMENT_SIZE = 1400;
     static int MOD = 5;
     static int KEEP_ALIVE_IDX = 0;
@@ -167,6 +168,29 @@ public class Program {
                         ResetKATimer();
                         break;
 
+                    // 0000 1000 - FIN
+                    case 8:
+                        headerToSend = new MyHeader() {
+                            Flags = (byte)(FlagsEnum.FIN | FlagsEnum.ACK)
+                        };
+                        SendFlags(headerToSend);
+
+                        Console.WriteLine("[i] Connection closed");
+                        sendingClient.Close();
+                        listenerClient.Close();
+                        IS_CONNECTION = false;
+                        Environment.Exit(1);
+                        break;
+                    
+                    // 0000 1010 - FIN, ACK
+                    case 10:
+                        Console.WriteLine("[i] Connection closed");
+                        sendingClient.Close();
+                        listenerClient.Close();
+                        IS_CONNECTION = false;
+                        Environment.Exit(1);
+                        break;
+
                     // 0001 0000 - KEEP_ALIVE
                     case 16:
                         //Console.WriteLine("~ [KEEP_ALIVE]");
@@ -175,6 +199,8 @@ public class Program {
                             Flags = (byte)(FlagsEnum.KEEP_ALIVE | FlagsEnum.ACK)
                         };
                         SendFlags(headerToSend);
+                        CAN_SEND_KA = false;
+
                         ResetKATimer();
                         break;
 
@@ -291,8 +317,11 @@ public class Program {
                                 string elapsedTime =
                                     String.Format("{0:00}:{1:00}.{2:00}", ts.Minutes, ts.Seconds, ts.Milliseconds / 10);
 
+                                long fileSize = new System.IO.FileInfo(fullPath).Length;
+
                                 Console.WriteLine($"\n[t] {elapsedTime}");
                                 Console.WriteLine($"[+] Recieved file: {fullPath}");
+                                Console.WriteLine($"[+] With size: {fileSize}");
 
                                 recvBuff.Clear();
                                 stopwatch.Reset();
@@ -324,100 +353,100 @@ public class Program {
             SendFlags(headerToSend);
         }
 
-        while(IS_CONNECTION) {
+        try {
+            while(IS_CONNECTION) {
 
-            string input = Console.ReadLine().Trim();
-            var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                string input = Console.ReadLine().Trim();
+                var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-            string command = parts.Length > 0
-                ? parts[0]
-                : "";
-            string message = parts.Length > 1
-                ? string.Join(" ", parts, 1, parts.Length - 1)
-                : "";
-            byte[] msgBytes;
+                string command = parts.Length > 0
+                    ? parts[0]
+                    : "";
+                string message = parts.Length > 1
+                    ? string.Join(" ", parts, 1, parts.Length - 1)
+                    : "";
+                byte[] msgBytes;
 
-            switch(command) {
-                case "/help":
-                    _utils.PrintHelpMenu();
-                    break;
+                switch(command) {
+                    case "/help":
+                        _utils.PrintHelpMenu();
+                        break;
 
-                case "/msg":
-                    msgBytes = Encoding.ASCII.GetBytes(message);
-                    SendMessage(msgBytes, false);
-                    break;
+                    case "/msg":
+                        msgBytes = Encoding.ASCII.GetBytes(message);
+                        SendMessage(msgBytes, false);
+                        break;
 
-                case "/dmsg":
-                    msgBytes = Encoding.ASCII.GetBytes(message);
-                    SendMessage(msgBytes, true);
-                    break;
+                    case "/exit":
+                        headerToSend = new MyHeader() {
+                            Flags = (byte)FlagsEnum.FIN
+                        };
 
-                case "/file":
-                    SendFile(message, false);        // message == file path
-                    break;
+                        SendFlags(headerToSend);
+                        break;
 
-                case "/dfile":
-                    SendFile(message, true);
-                    break;
+                    case "/dmsg":
+                        msgBytes = Encoding.ASCII.GetBytes(message);
+                        SendMessage(msgBytes, true);
+                        break;
 
-                case "/status":
-                    PrintStatusMenu();
-                    break;
+                    case "/file":
+                        SendFile(message, false);        // message == file path
+                        break;
 
-                case "/setfsize":
-                    try {
-                        int fragSize = int.Parse(message);
+                    case "/dfile":
+                        SendFile(message, true);
+                        break;
 
-                        if(fragSize >= 1 && fragSize <= 1400) {
-                            FRAGMENT_SIZE = fragSize;
-                            Console.WriteLine($"[+] Fragment size set to: {FRAGMENT_SIZE}");
+                    case "/status":
+                        PrintStatusMenu();
+                        break;
+
+                    case "/setfsize":
+                        try {
+                            int fragSize = int.Parse(message);
+
+                            if(fragSize >= 1 && fragSize <= 1400) {
+                                FRAGMENT_SIZE = fragSize;
+                                Console.WriteLine($"[+] Fragment size set to: {FRAGMENT_SIZE}");
+                            }
+                            else {
+                                Console.WriteLine("[!] Incorrect fragment size");
+                            }
                         }
-                        else {
-                            Console.WriteLine("[!] Incorrect fragment size");
+                        catch(Exception e) {
+                            Console.WriteLine($"[!] {e}");
                         }
-                    }
-                    catch(Exception e) {
-                        Console.WriteLine($"[!] {e}");
-                    }
-                    break;
+                        break;
 
-                case "/setdir":
-                    DESTINATION_FILE_PATH = message;
-                    Console.WriteLine($"[+] Destination set to: {DESTINATION_FILE_PATH}");
-                    break;
+                    case "/setdir":
+                        DESTINATION_FILE_PATH = message;
+                        Console.WriteLine($"[+] Destination set to: {DESTINATION_FILE_PATH}");
+                        break;
 
-                case "/setmodulo":
-                    int newMod = int.Parse(message);
-                    MOD = newMod;
-                    Console.WriteLine($"[+] Destination set to: {DESTINATION_FILE_PATH}");
-                    break;
+                    case "/setmodulo":
+                        int newMod = int.Parse(message);
+                        MOD = newMod;
+                        Console.WriteLine($"[+] Destination set to: {DESTINATION_FILE_PATH}");
+                        break;
 
-                case "/clear":
-                    Console.Clear();
-                    break;
+                    case "/clear":
+                        Console.Clear();
+                        break;
 
-                default:
-                    Console.WriteLine("[!] Invalid command, use /help if you don't know what to do ;)");
-                    break;
+                    default:
+                        Console.WriteLine("[!] Invalid command, use /help if you don't know what to do ;)");
+                        break;
+                }
             }
+        }catch(Exception e) {
+            Console.WriteLine($"[!] Invalid input");
         }
+        
     }
 
 
     static void SendFlags(MyHeader message) {
-
-        if(message.Data != null) {
-            message.Crc16 = _utils.GetCrc16(message.Data.ToArray());
-        }
-
-        //lastSent = new MyHeader() {
-        //    Flags = message.Flags,
-        //    FragTotal = message.FragTotal,
-        //    SeqNum = message.SeqNum,
-        //    Crc16 = message.Crc16,
-        //    Data = message.Data
-        //};
-
         var sendBytes = _utils.GetByteArr(message);
         SendRawBytes(sendBytes);
     }
@@ -468,7 +497,6 @@ public class Program {
             while(!ACK_RECV) {
                 Thread.Sleep(1);
                 //Thread.Yield();
-
             }
             ACK_RECV = false;
 
@@ -544,12 +572,17 @@ public class Program {
             while(!ACK_RECV) {
                 Thread.Sleep(1);
                 //Thread.Yield();
-
             }
             ACK_RECV = false;
 
             idx++;
         }
+
+        long fileSize = new System.IO.FileInfo(path).Length;
+        Console.WriteLine("---------------------------------------");
+        Console.WriteLine($"[i] Succesfully sent file: {path}");
+        Console.WriteLine($"[i] with size: {fileSize}");
+        Console.WriteLine("---------------------------------------");
     }
     static void ResendFragment(MyHeader message) {
         byte[] seqNum32 = new byte[4];
@@ -589,18 +622,21 @@ public class Program {
 
         if(KEEP_ALIVE_IDX > MAX_KEEP_ALIVE_RETRIES) {
             Console.WriteLine("[i] Other peer has disconected, closing the connection");
+            IS_CONNECTION = false;
             sendingClient.Close();
             listenerClient.Close();
-            IS_CONNECTION = false;
+            kaTimer.Close();
+            Environment.Exit(1);
             return;
         }
 
         //Console.WriteLine($"[<<] KEEP_ALIVE; KA_idx: {KEEP_ALIVE_IDX}");
-
-        MyHeader kaHeader = new MyHeader() {
-            Flags = (byte)FlagsEnum.KEEP_ALIVE
-        };
-        SendFlags(kaHeader);
+        if(CAN_SEND_KA) {
+            MyHeader kaHeader = new MyHeader() {
+                Flags = (byte)FlagsEnum.KEEP_ALIVE
+            };
+            SendFlags(kaHeader);
+        }
     }
     static void ResetKATimer() {
         kaTimer.Stop();

@@ -34,4 +34,4 @@ public class MyHeader {
         Crc16 = 0;
         Data = new List<byte>();
     }
-}
+}   
