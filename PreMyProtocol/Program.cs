@@ -23,6 +23,12 @@ public class Program {
     static int KEEP_ALIVE_IDX = 0;
     static string DESTINATION_FILE_PATH = @"C:\Users\adamp\Skola\ZS2\PKS\testDir2";
 
+
+    static int TOTAL_REZIJNE_BYTES = 0;
+    static int TOTAL_BYTES = 0;
+    static int MSG_CTR = 0;
+
+
     static UdpClient sendingClient;
     static UdpClient listenerClient;
     static IPEndPoint remoteEndPoint;
@@ -107,6 +113,8 @@ public class Program {
                 switch(recievedHeader.Flags) {
                     // 0000 0001 - SYN
                     case 1:
+                        MSG_CTR++;
+                        TOTAL_REZIJNE_BYTES += 9;
                         INIT_HAND_SHAKEN = true;
                         Console.WriteLine("~ [SYN]");
                         headerToSend = new MyHeader();
@@ -116,6 +124,8 @@ public class Program {
 
                     // 0000 0010 - ACK
                     case 2:
+                        MSG_CTR++;
+                        TOTAL_REZIJNE_BYTES += 9;
                         Console.WriteLine("~ [ACK]");
 
                         if(!HAND_SHAKE_DONE) {
@@ -140,6 +150,8 @@ public class Program {
 
                     // 0000 0011 - SYN, ACK
                     case 3:
+                        MSG_CTR++;
+                        TOTAL_REZIJNE_BYTES += 9;
                         Console.WriteLine("~ [SYN,ACK]");
 
                         headerToSend = new MyHeader();
@@ -163,6 +175,8 @@ public class Program {
 
                     // 0000 0100 - NACK
                     case 4:
+                        MSG_CTR++;
+                        TOTAL_REZIJNE_BYTES += 9;
                         Console.WriteLine("~ [NACK]");
                         ResendFragment(lastSent);
                         ResetKATimer();
@@ -170,6 +184,8 @@ public class Program {
 
                     // 0000 1000 - FIN
                     case 8:
+                        MSG_CTR++;
+                        TOTAL_REZIJNE_BYTES += 9;
                         headerToSend = new MyHeader() {
                             Flags = (byte)(FlagsEnum.FIN | FlagsEnum.ACK)
                         };
@@ -184,6 +200,8 @@ public class Program {
                     
                     // 0000 1010 - FIN, ACK
                     case 10:
+                        MSG_CTR++;
+                        TOTAL_REZIJNE_BYTES += 9;
                         Console.WriteLine("[i] Connection closed");
                         sendingClient.Close();
                         listenerClient.Close();
@@ -213,6 +231,10 @@ public class Program {
 
                     // 0010 0000 - TXT_MSG_TYPE
                     case 32:
+                        MSG_CTR++;
+                        TOTAL_REZIJNE_BYTES += 9;
+                        TOTAL_BYTES += recievedHeader.Data.Count;
+
                         seqNum32 = new byte[4];
                         fragTotal32 = new byte[4];
 
@@ -255,6 +277,9 @@ public class Program {
                             }
 
                             string msg = Encoding.ASCII.GetString(fullMsgData.ToArray());
+                            double percentage = ((double)TOTAL_REZIJNE_BYTES / (TOTAL_BYTES + TOTAL_REZIJNE_BYTES)) * 100;
+
+                            Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
                             Console.WriteLine($">> {msg}");
 
                             recvBuff.Clear();
@@ -266,6 +291,9 @@ public class Program {
 
                     // 0100 0000 - FILE_MSG_TYPE
                     case 64:
+                        MSG_CTR++;
+                        TOTAL_REZIJNE_BYTES += 9;
+                        TOTAL_BYTES += recievedHeader.Data.Count;
                         seqNum32 = new byte[4];
                         fragTotal32 = new byte[4];
 
@@ -318,10 +346,12 @@ public class Program {
                                     String.Format("{0:00}:{1:00}.{2:00}", ts.Minutes, ts.Seconds, ts.Milliseconds / 10);
 
                                 long fileSize = new System.IO.FileInfo(fullPath).Length;
+                                double percentage = ((double)TOTAL_REZIJNE_BYTES / (TOTAL_BYTES + TOTAL_REZIJNE_BYTES)) * 100;
 
                                 Console.WriteLine($"\n[t] {elapsedTime}");
                                 Console.WriteLine($"[+] Recieved file: {fullPath}");
                                 Console.WriteLine($"[+] With size: {fileSize}");
+                                Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
 
                                 recvBuff.Clear();
                                 stopwatch.Reset();
@@ -447,6 +477,8 @@ public class Program {
 
 
     static void SendFlags(MyHeader message) {
+        MSG_CTR++;
+        TOTAL_REZIJNE_BYTES += 9;
         var sendBytes = _utils.GetByteArr(message);
         SendRawBytes(sendBytes);
     }
@@ -457,6 +489,9 @@ public class Program {
 
         int idx = 0;
         foreach(var frag in fragments) {
+            MSG_CTR++;
+            TOTAL_REZIJNE_BYTES += 9;
+            TOTAL_BYTES += frag.Length;
             //Console.WriteLine($"[+] SeqNum: {idx}; Size: {frag.Length}");
             try {
                 MyHeader fragment = new MyHeader() {
@@ -502,6 +537,9 @@ public class Program {
 
             idx++;
         }
+        double percentage = ((double)TOTAL_REZIJNE_BYTES / (TOTAL_BYTES + TOTAL_REZIJNE_BYTES)) * 100;
+        Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
+
     }
     static void SendFile(string path, bool toBeDamaged) {
         MyHeader initFragment;
@@ -512,6 +550,7 @@ public class Program {
         var fileBytes = File.ReadAllBytes(path);
         List<byte> listFileBytes = new List<byte>(fileBytes);
         var fragments = listFileBytes.Chunk(FRAGMENT_SIZE).ToList();
+
 
         initFragment = new MyHeader() {
             Flags = (byte)FlagsEnum.FILE_MSG_TYPE,
@@ -529,11 +568,18 @@ public class Program {
             Data = initFragment.Data
         };
 
+
+        MSG_CTR++;
+        TOTAL_REZIJNE_BYTES += 9;
+        TOTAL_BYTES += nameBytes.Length;
         var sendInitBytes = _utils.GetByteArr(initFragment);
         SendRawBytes(sendInitBytes);
 
         int idx = 0;
         foreach(var frag in fragments) {
+            MSG_CTR++;
+            TOTAL_REZIJNE_BYTES += 9;
+            TOTAL_BYTES += frag.Length;
             Console.WriteLine($"[+] SeqNum: {idx}; Size: {frag.Length}");
             try {
                 MyHeader fragment = new MyHeader() {
@@ -579,12 +625,18 @@ public class Program {
         }
 
         long fileSize = new System.IO.FileInfo(path).Length;
+        double percentage = ((double)TOTAL_REZIJNE_BYTES / (TOTAL_BYTES + TOTAL_REZIJNE_BYTES)) * 100;
         Console.WriteLine("---------------------------------------");
         Console.WriteLine($"[i] Succesfully sent file: {path}");
         Console.WriteLine($"[i] with size: {fileSize}");
+        Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
         Console.WriteLine("---------------------------------------");
     }
     static void ResendFragment(MyHeader message) {
+        MSG_CTR++;
+        TOTAL_REZIJNE_BYTES += 9;
+        TOTAL_BYTES += message.Data.Count;
+        
         byte[] seqNum32 = new byte[4];
         seqNum32 = _utils.Create32bit(message.SeqNum);
 
@@ -653,7 +705,13 @@ public class Program {
         int seqNum = BitConverter.ToInt32(seqNum32);
         int fragTotal = BitConverter.ToInt32(fragTotal32);
 
+        double percentage = ((double)TOTAL_REZIJNE_BYTES / (TOTAL_BYTES + TOTAL_REZIJNE_BYTES)) * 100;
         Console.WriteLine("\n==============================================================\n");
+        Console.WriteLine($"[i] Total bytes: {TOTAL_BYTES}");
+        Console.WriteLine($"[i] Total rezijne bytes: {TOTAL_REZIJNE_BYTES}");
+        Console.WriteLine($"[i] Total msgs: {MSG_CTR}");
+        Console.WriteLine($"[i] %: {percentage:0.00}");
+        Console.WriteLine("\n--------------------------------------------------------------\n");
         Console.WriteLine($"[i] Recieving IPv4: {remoteEndPoint.Address}");
         Console.WriteLine($"[i] Local dest dir: {DESTINATION_FILE_PATH}");
         Console.WriteLine($"[i] Fragment size: {FRAGMENT_SIZE}");
