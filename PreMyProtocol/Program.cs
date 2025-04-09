@@ -279,7 +279,7 @@ public class Program {
                             string msg = Encoding.ASCII.GetString(fullMsgData.ToArray());
                             double percentage = ((double)TOTAL_REZIJNE_BYTES / (TOTAL_BYTES + TOTAL_REZIJNE_BYTES)) * 100;
 
-                            Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
+                           // Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
                             Console.WriteLine($">> {msg}");
 
                             recvBuff.Clear();
@@ -351,7 +351,7 @@ public class Program {
                                 Console.WriteLine($"\n[t] {elapsedTime}");
                                 Console.WriteLine($"[+] Recieved file: {fullPath}");
                                 Console.WriteLine($"[+] With size: {fileSize}");
-                                Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
+                               // Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
 
                                 recvBuff.Clear();
                                 stopwatch.Reset();
@@ -538,7 +538,7 @@ public class Program {
             idx++;
         }
         double percentage = ((double)TOTAL_REZIJNE_BYTES / (TOTAL_BYTES + TOTAL_REZIJNE_BYTES)) * 100;
-        Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
+        //Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
 
     }
     static void SendFile(string path, bool toBeDamaged) {
@@ -629,7 +629,7 @@ public class Program {
         Console.WriteLine("---------------------------------------");
         Console.WriteLine($"[i] Succesfully sent file: {path}");
         Console.WriteLine($"[i] with size: {fileSize}");
-        Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
+        //Console.WriteLine($"Total bytes: {TOTAL_REZIJNE_BYTES} = {percentage:0.00}%");
         Console.WriteLine("---------------------------------------");
     }
     static void ResendFragment(MyHeader message) {
@@ -707,11 +707,11 @@ public class Program {
 
         double percentage = ((double)TOTAL_REZIJNE_BYTES / (TOTAL_BYTES + TOTAL_REZIJNE_BYTES)) * 100;
         Console.WriteLine("\n==============================================================\n");
-        Console.WriteLine($"[i] Total bytes: {TOTAL_BYTES}");
-        Console.WriteLine($"[i] Total rezijne bytes: {TOTAL_REZIJNE_BYTES}");
-        Console.WriteLine($"[i] Total msgs: {MSG_CTR}");
-        Console.WriteLine($"[i] %: {percentage:0.00}");
-        Console.WriteLine("\n--------------------------------------------------------------\n");
+        //Console.WriteLine($"[i] Total bytes: {TOTAL_BYTES}");
+        //Console.WriteLine($"[i] Total rezijne bytes: {TOTAL_REZIJNE_BYTES}");
+        //Console.WriteLine($"[i] Total msgs: {MSG_CTR}");
+        //Console.WriteLine($"[i] %: {percentage:0.00}");
+        //Console.WriteLine("\n--------------------------------------------------------------\n");
         Console.WriteLine($"[i] Recieving IPv4: {remoteEndPoint.Address}");
         Console.WriteLine($"[i] Local dest dir: {DESTINATION_FILE_PATH}");
         Console.WriteLine($"[i] Fragment size: {FRAGMENT_SIZE}");
